@@ -35,13 +35,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Test connection
             println!("Testing connection to Jira instance...");
             match ConnectionValidator::connect_with_config(&jira_cli_config).await {
-                Ok((_client, status)) => {
+                Ok((client, status)) => {
                     match status {
                         ConnectionStatus::Connected => {
                             println!("✓ Successfully connected to Jira!\n");
                             
                             // Initialize UI and start application
-                            let mut app = ui::App::new("Connected".to_string())?;
+                            let client: std::sync::Arc<dyn infrastructure::api::ApiClient> = 
+                                std::sync::Arc::new(client);
+                            let mut app = ui::App::new("Connected".to_string(), client)?;
                             app.run().await?;
                         }
                         _ => {

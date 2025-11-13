@@ -1,3 +1,5 @@
+use crate::infrastructure::api::ApiClient;
+use crate::ui::components::ticket_list::{TicketList, TicketListState};
 use crate::ui::events::{AppEvent, EventHandler};
 use crate::ui::renderer::Renderer;
 use crossterm::{
@@ -10,7 +12,17 @@ use ratatui::{
     Terminal,
 };
 use std::io::{self, stdout, Stdout};
+use std::sync::Arc;
 use std::time::Duration;
+
+/// Loading state for tickets
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LoadingState {
+    Idle,
+    Loading,
+    Loaded,
+    Error(String),
+}
 
 /// Main UI application
 pub struct App {
@@ -19,11 +31,17 @@ pub struct App {
     renderer: Renderer,
     running: bool,
     connection_status: String,
+    ticket_list_state: TicketListState,
+    ticket_service: Arc<dyn ApiClient>,
+    loading_state: LoadingState,
 }
 
 impl App {
     /// Create a new application instance
-    pub fn new(connection_status: String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(
+        connection_status: String,
+        ticket_service: Arc<dyn ApiClient>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         // Setup terminal
         enable_raw_mode()?;
         let mut stdout = stdout();
@@ -39,11 +57,17 @@ impl App {
             renderer,
             running: true,
             connection_status,
+            ticket_list_state: TicketListState::new(),
+            ticket_service,
+            loading_state: LoadingState::Idle,
         })
     }
 
     /// Run the application main loop
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Load initial tickets
+        self.load_tickets().await;
+
         while self.running {
             // Draw UI
             self.draw()?;
@@ -55,21 +79,51 @@ impl App {
                         self.running = false;
                     }
                     AppEvent::Refresh => {
-                        // TODO: Refresh data
+                        self.load_tickets().await;
+                    }
+                    AppEvent::MoveUp => {
+                        self.ticket_list_state.move_up();
+                    }
+                    AppEvent::MoveDown => {
+                        self.ticket_list_state.move_down();
+                    }
+                    AppEvent::ToggleSelection => {
+                        self.ticket_list_state.toggle_selection();
                     }
                     _ => {
-                        // TODO: Handle other events
+                        // Other events handled elsewhere
                     }
                 }
             }
 
             // Handle ticks
             if self.event_handler.should_tick() {
-                // TODO: Update UI state
+                // Periodic updates can go here
             }
         }
 
         Ok(())
+    }
+
+    /// Load tickets from API
+    async fn load_tickets(&mut self) {
+        self.loading_state = LoadingState::Loading;
+        
+        // Default JQL: get assigned tickets, ordered by updated date
+        let jql = "assignee = currentUser() ORDER BY updated DESC";
+        match self
+            .ticket_service
+            .search_issues(jql, 0, 50)
+            .await
+        {
+            Ok(result) => {
+                self.ticket_list_state.set_tickets(result.issues);
+                self.loading_state = LoadingState::Loaded;
+            }
+            Err(e) => {
+                self.loading_state = LoadingState::Error(format!("Failed to load tickets: {}", e));
+            }
+        }
     }
 
     /// Draw the UI
@@ -93,8 +147,27 @@ impl App {
                 ])
                 .split(area);
 
-            if let Err(e) = self.renderer.render_content_area(frame, chunks[1], "Welcome to LazyJira! Press 'q' to quit.") {
-                eprintln!("Error rendering content: {}", e);
+            // Render ticket list or loading/error state
+            match &self.loading_state {
+                LoadingState::Loading => {
+                    if let Err(e) = self.renderer.render_content_area(
+                        frame,
+                        chunks[1],
+                        "Loading tickets...",
+                    ) {
+                        eprintln!("Error rendering content: {}", e);
+                    }
+                }
+                LoadingState::Error(msg) => {
+                    if let Err(e) = self.renderer.render_content_area(frame, chunks[1], msg) {
+                        eprintln!("Error rendering content: {}", e);
+                    }
+                }
+                _ => {
+                    // Render ticket list
+                    let ticket_list = TicketList::new(&self.ticket_list_state, self.renderer.theme());
+                    ticket_list.render(frame, chunks[1]);
+                }
             }
         })?;
 
