@@ -39,7 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match status {
                         ConnectionStatus::Connected => {
                             println!("✓ Successfully connected to Jira!\n");
-                            // TODO: Initialize UI and start application with client
+                            
+                            // Initialize UI and start application
+                            let mut app = ui::App::new("Connected".to_string())?;
+                            app.run().await?;
                         }
                         _ => {
                             eprintln!("\n✗ Connection failed:");
