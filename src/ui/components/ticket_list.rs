@@ -1,10 +1,9 @@
 use crate::domain::models::ticket::Ticket;
 use crate::ui::theme::Theme;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Modifier, Style},
+    layout::{Alignment, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
 use std::collections::HashSet;
@@ -138,7 +137,7 @@ impl<'a> TicketList<'a> {
             list_state.select(Some(focused_idx));
         }
 
-        StatefulWidget::render(list, area, frame, &mut list_state);
+        frame.render_stateful_widget(list, area, &mut list_state);
     }
 
     /// Create a list item for a ticket
