@@ -1,4 +1,5 @@
 use super::client::{ApiClient, CreateIssueData, SearchResult, Transition, UpdateIssueData};
+use super::parser::{parse_issue, parse_search_results};
 use crate::domain::models::ticket::Ticket;
 use crate::infrastructure::config::JiraCliConfig;
 use crate::utils::{LazyJiraError, Result};
@@ -129,11 +130,10 @@ impl JiraApiClient {
 impl ApiClient for JiraApiClient {
     async fn get_issue(&self, key: &str) -> Result<Ticket> {
         let endpoint = format!("issue/{}", key);
-        let _json = self.get(&endpoint).await?;
+        let json = self.get(&endpoint).await?;
         
         // Parse ticket from JSON response
-        // This is a placeholder - we'll implement proper parsing when we have the Ticket model
-        Err(LazyJiraError::Internal("Not yet implemented".to_string()))
+        parse_issue(&json)
     }
 
     async fn search_issues(
@@ -148,15 +148,17 @@ impl ApiClient for JiraApiClient {
             start_at,
             max_results
         );
-        let _json = self.get(&endpoint).await?;
+        let json = self.get(&endpoint).await?;
         
         // Parse search result
-        // Placeholder implementation
+        let (parsed_start_at, parsed_max_results, total, issues) =
+            parse_search_results(&json)?;
+        
         Ok(SearchResult {
-            start_at,
-            max_results,
-            total: 0,
-            issues: vec![],
+            start_at: parsed_start_at,
+            max_results: parsed_max_results,
+            total,
+            issues,
         })
     }
 
