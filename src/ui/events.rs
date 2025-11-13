@@ -114,7 +114,7 @@ mod tests {
         );
         assert_eq!(
             EventHandler::handle_key(create_key_event(KeyCode::Esc, KeyModifiers::empty())),
-            AppEvent::Quit
+            AppEvent::ExitDetail
         );
     }
 

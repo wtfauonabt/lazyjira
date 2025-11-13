@@ -58,7 +58,7 @@ impl Renderer {
 
     /// Render the help bar
     fn render_help_bar(&mut self, frame: &mut Frame, area: Rect) -> Result<(), std::io::Error> {
-        let help_text = " [q]uit [↑↓/jk]move [Enter]detail [Space]select [r]efresh ";
+        let help_text = " [q]uit [↑↓/jk]move [Enter]detail [Esc]back [Space]select [r]efresh ";
         let paragraph = Paragraph::new(help_text)
             .style(self.theme.help_bar)
             .alignment(Alignment::Left)
