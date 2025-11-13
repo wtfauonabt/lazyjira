@@ -70,7 +70,8 @@ impl EventHandler {
     /// Handle a key event and convert it to an AppEvent
     pub fn handle_key(key_event: KeyEvent) -> AppEvent {
         match key_event.code {
-            KeyCode::Char('q') | KeyCode::Esc if key_event.modifiers.is_empty() => AppEvent::Quit,
+            KeyCode::Char('q') if key_event.modifiers.is_empty() => AppEvent::Quit,
+            KeyCode::Esc if key_event.modifiers.is_empty() => AppEvent::ExitDetail,
             KeyCode::Char('Q') if key_event.modifiers.contains(KeyModifiers::SHIFT) => AppEvent::Quit,
             KeyCode::Up | KeyCode::Char('k') => AppEvent::MoveUp,
             KeyCode::Down | KeyCode::Char('j') => AppEvent::MoveDown,

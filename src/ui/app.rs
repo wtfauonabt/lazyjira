@@ -1,4 +1,6 @@
+use crate::domain::models::ticket::Ticket;
 use crate::infrastructure::api::ApiClient;
+use crate::ui::components::ticket_detail::TicketDetail;
 use crate::ui::components::ticket_list::{TicketList, TicketListState};
 use crate::ui::events::{AppEvent, EventHandler};
 use crate::ui::renderer::Renderer;
@@ -24,6 +26,13 @@ enum LoadingState {
     Error(String),
 }
 
+/// Current view mode
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewMode {
+    List,
+    Detail,
+}
+
 /// Main UI application
 pub struct App {
     terminal: Terminal<CrosstermBackend<Stdout>>,
@@ -34,6 +43,9 @@ pub struct App {
     ticket_list_state: TicketListState,
     ticket_service: Arc<dyn ApiClient>,
     loading_state: LoadingState,
+    view_mode: ViewMode,
+    detail_ticket: Option<Ticket>,
+    detail_loading: bool,
 }
 
 impl App {
@@ -60,6 +72,9 @@ impl App {
             ticket_list_state: TicketListState::new(),
             ticket_service,
             loading_state: LoadingState::Idle,
+            view_mode: ViewMode::List,
+            detail_ticket: None,
+            detail_loading: false,
         })
     }
 
@@ -89,6 +104,17 @@ impl App {
                     }
                     AppEvent::ToggleSelection => {
                         self.ticket_list_state.toggle_selection();
+                    }
+                    AppEvent::EnterDetail => {
+                        if self.view_mode == ViewMode::List {
+                            self.open_detail_view().await;
+                        }
+                    }
+                    AppEvent::ExitDetail => {
+                        if self.view_mode == ViewMode::Detail {
+                            self.view_mode = ViewMode::List;
+                            self.detail_ticket = None;
+                        }
                     }
                     _ => {
                         // Other events handled elsewhere
@@ -126,6 +152,30 @@ impl App {
         }
     }
 
+    /// Open detail view for focused ticket
+    async fn open_detail_view(&mut self) {
+        if let Some(ticket) = self.ticket_list_state.focused_ticket() {
+            let ticket_key = ticket.key.clone();
+            self.view_mode = ViewMode::Detail;
+            self.detail_loading = true;
+            self.detail_ticket = None;
+
+            // Fetch full ticket details
+            match self.ticket_service.get_issue(&ticket_key).await {
+                Ok(full_ticket) => {
+                    self.detail_ticket = Some(full_ticket);
+                    self.detail_loading = false;
+                }
+                Err(e) => {
+                    // On error, use the ticket from list (may be incomplete)
+                    self.detail_ticket = Some(ticket.clone());
+                    self.detail_loading = false;
+                    // Could set an error state here if needed
+                }
+            }
+        }
+    }
+
     /// Draw the UI
     fn draw(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|frame| {
@@ -147,26 +197,54 @@ impl App {
                 ])
                 .split(area);
 
-            // Render ticket list or loading/error state
-            match &self.loading_state {
-                LoadingState::Loading => {
-                    if let Err(e) = self.renderer.render_content_area(
-                        frame,
-                        chunks[1],
-                        "Loading tickets...",
-                    ) {
-                        eprintln!("Error rendering content: {}", e);
+            // Render based on view mode
+            match self.view_mode {
+                ViewMode::List => {
+                    // Render ticket list or loading/error state
+                    match &self.loading_state {
+                        LoadingState::Loading => {
+                            if let Err(e) = self.renderer.render_content_area(
+                                frame,
+                                chunks[1],
+                                "Loading tickets...",
+                            ) {
+                                eprintln!("Error rendering content: {}", e);
+                            }
+                        }
+                        LoadingState::Error(msg) => {
+                            if let Err(e) = self.renderer.render_content_area(frame, chunks[1], msg) {
+                                eprintln!("Error rendering content: {}", e);
+                            }
+                        }
+                        _ => {
+                            // Render ticket list
+                            let ticket_list = TicketList::new(&self.ticket_list_state, self.renderer.theme());
+                            ticket_list.render(frame, chunks[1]);
+                        }
                     }
                 }
-                LoadingState::Error(msg) => {
-                    if let Err(e) = self.renderer.render_content_area(frame, chunks[1], msg) {
-                        eprintln!("Error rendering content: {}", e);
+                ViewMode::Detail => {
+                    // Render detail view
+                    if self.detail_loading {
+                        if let Err(e) = self.renderer.render_content_area(
+                            frame,
+                            chunks[1],
+                            "Loading ticket details...",
+                        ) {
+                            eprintln!("Error rendering content: {}", e);
+                        }
+                    } else if let Some(ticket) = &self.detail_ticket {
+                        let detail = TicketDetail::new(ticket, self.renderer.theme());
+                        detail.render(frame, chunks[1]);
+                    } else {
+                        if let Err(e) = self.renderer.render_content_area(
+                            frame,
+                            chunks[1],
+                            "No ticket selected.",
+                        ) {
+                            eprintln!("Error rendering content: {}", e);
+                        }
                     }
-                }
-                _ => {
-                    // Render ticket list
-                    let ticket_list = TicketList::new(&self.ticket_list_state, self.renderer.theme());
-                    ticket_list.render(frame, chunks[1]);
                 }
             }
         })?;
