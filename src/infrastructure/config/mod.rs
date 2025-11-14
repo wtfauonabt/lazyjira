@@ -153,39 +153,127 @@ impl Config {
                 e
             )))?;
 
-        // Extract instance and auth info from jira-cli config
+        // Extract instance/server and auth info from config
+        // Support both formats:
+        // 1. jira-cli format: instance + auth.type/auth.username/auth.token
+        // 2. jira CLI format: server + auth_type (credentials stored separately)
         let instance = yaml.get("instance")
+            .or_else(|| yaml.get("server"))
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        let auth = yaml.get("auth")
-            .and_then(|a| {
-                let auth_type = a.get("type")?.as_str()?;
-                let username = a.get("username")?.as_str()?;
-                let token = a.get("token").and_then(|t| t.as_str());
-                
-                Some(JiraCliAuth {
-                    auth_type: auth_type.to_string(),
-                    username: username.to_string(),
-                    token: token.map(|s| s.to_string()),
-                })
+            .map(|s| {
+                // Extract domain from URL if it's a full URL
+                let s = s.trim();
+                if s.starts_with("http://") || s.starts_with("https://") {
+                    s.replace("https://", "").replace("http://", "").split('/').next().unwrap_or(s).to_string()
+                } else {
+                    s.to_string()
+                }
             });
 
-        if let (Some(instance), Some(auth)) = (instance, auth) {
-            Ok(Some(JiraCliConfig { instance, auth }))
+        let auth = if let Some(auth_obj) = yaml.get("auth") {
+            // jira-cli format: nested auth object
+            if let (Some(auth_type_val), Some(username_val)) = (
+                auth_obj.get("type").and_then(|v| v.as_str()),
+                auth_obj.get("username").and_then(|v| v.as_str())
+            ) {
+                let token = auth_obj.get("token").and_then(|t| t.as_str());
+                
+                Some(JiraCliAuth {
+                    auth_type: auth_type_val.to_string(),
+                    username: username_val.to_string(),
+                    token: token.map(|s| s.to_string()),
+                })
+            } else {
+                None
+            }
+        } else if let Some(auth_type) = yaml.get("auth_type").and_then(|v| v.as_str()) {
+            // jira CLI format: auth_type at top level
+            // For API token auth, check JIRA_API_TOKEN env var
+            // For basic auth, check JIRA_USERNAME and JIRA_PASSWORD env vars
+            if auth_type == "api-token" || std::env::var("JIRA_API_TOKEN").is_ok() {
+                // API token authentication
+                let token = std::env::var("JIRA_API_TOKEN").ok();
+                // Try to get username from environment or jira CLI command
+                let username = std::env::var("JIRA_USERNAME").ok().or_else(|| {
+                    // Try to get from jira CLI's "me" command
+                    std::process::Command::new("jira")
+                        .arg("me")
+                        .output()
+                        .ok()
+                        .and_then(|output| {
+                            String::from_utf8(output.stdout).ok()
+                        })
+                        .map(|s| s.trim().to_string())
+                });
+                
+                if let Some(user) = username {
+                    Some(JiraCliAuth {
+                        auth_type: "api-token".to_string(),
+                        username: user,
+                        token,
+                    })
+                } else {
+                    None
+                }
+            } else {
+                // Basic authentication
+                let username = std::env::var("JIRA_USERNAME").ok();
+                let password = std::env::var("JIRA_PASSWORD").ok();
+                
+                if let Some(user) = username {
+                    Some(JiraCliAuth {
+                        auth_type: auth_type.to_string(),
+                        username: user,
+                        token: password, // Store password as token for basic auth
+                    })
+                } else {
+                    None
+                }
+            }
         } else {
-            Ok(None)
+            None
+        };
+
+        match (instance, auth) {
+            (Some(inst), Some(auth_val)) => {
+                Ok(Some(JiraCliConfig { instance: inst, auth: auth_val }))
+            }
+            _ => {
+                Ok(None)
+            }
         }
     }
 
     /// Get the path to jira-cli configuration file
+    /// Checks multiple possible locations:
+    /// 1. ~/.config/.jira/.config.yml (jira CLI tool)
+    /// 2. ~/.config/jira-cli/config.yaml (jira-cli tool)
+    /// 3. ~/Library/Application Support/jira-cli/config.yaml (macOS jira-cli)
     fn jira_cli_config_path() -> Result<PathBuf> {
+        // First try: ~/.config/.jira/.config.yml (jira CLI tool)
+        if let Some(home) = dirs::home_dir() {
+            let jira_config_path = home.join(".config").join(".jira").join(".config.yml");
+            if jira_config_path.exists() {
+                return Ok(jira_config_path);
+            }
+        }
+        
+        // Second try: ~/.config/jira-cli/config.yaml (jira-cli tool on Linux)
+        if let Some(home) = dirs::home_dir() {
+            let jira_cli_config_path = home.join(".config").join("jira-cli").join("config.yaml");
+            if jira_cli_config_path.exists() {
+                return Ok(jira_cli_config_path);
+            }
+        }
+        
+        // Third try: Use dirs::config_dir() which on macOS returns ~/Library/Application Support
         let config_dir = dirs::config_dir()
             .ok_or_else(|| crate::utils::LazyJiraError::Config(
                 "Could not determine config directory".to_string()
             ))?;
         
-        Ok(config_dir.join("jira-cli").join("config.yaml"))
+        let jira_cli_config_path = config_dir.join("jira-cli").join("config.yaml");
+        Ok(jira_cli_config_path)
     }
 }
 

@@ -24,6 +24,18 @@ pub enum AppEvent {
     EnterDetail,
     /// Exit detail view
     ExitDetail,
+    /// Assign ticket to current user
+    AssignToMe,
+    /// Start progress (transition to In Progress)
+    StartProgress,
+    /// Resolve ticket
+    Resolve,
+    /// Create new ticket
+    CreateTicket,
+    /// Show transitions
+    ShowTransitions,
+    /// Add comment
+    AddComment,
     /// Unknown/unhandled key
     Unknown,
 }
@@ -79,8 +91,14 @@ impl EventHandler {
             KeyCode::Right | KeyCode::Char('l') => AppEvent::MoveRight,
             KeyCode::Enter => AppEvent::EnterDetail,
             KeyCode::Char(' ') => AppEvent::ToggleSelection,
-            KeyCode::Char('r') | KeyCode::Char('R') => AppEvent::Refresh,
             KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => AppEvent::Quit,
+            KeyCode::Char('R') if key_event.modifiers.contains(KeyModifiers::SHIFT) => AppEvent::Resolve,
+            KeyCode::Char('r') if key_event.modifiers.is_empty() => AppEvent::Refresh,
+            KeyCode::Char('a') if key_event.modifiers.is_empty() => AppEvent::AssignToMe,
+            KeyCode::Char('s') if key_event.modifiers.is_empty() => AppEvent::StartProgress,
+            KeyCode::Char('n') if key_event.modifiers.is_empty() => AppEvent::CreateTicket,
+            KeyCode::Char('t') if key_event.modifiers.is_empty() => AppEvent::ShowTransitions,
+            KeyCode::Char('c') if key_event.modifiers.is_empty() => AppEvent::AddComment,
             _ => AppEvent::Unknown,
         }
     }

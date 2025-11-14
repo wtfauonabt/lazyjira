@@ -291,18 +291,35 @@ pub fn parse_search_results(json: &Value) -> Result<(usize, usize, usize, Vec<Ti
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as usize;
 
+    // Try to get issues array - could be "issues" or "values" depending on endpoint
     let issues_array = json
         .get("issues")
+        .or_else(|| json.get("values"))
         .and_then(|v| v.as_array())
-        .ok_or_else(|| LazyJiraError::Parse("Missing 'issues' array".to_string()))?;
+        .ok_or_else(|| {
+            // Debug: log what keys are available
+            let available_keys: Vec<String> = json
+                .as_object()
+                .map(|obj| obj.keys().map(|k| k.clone()).collect())
+                .unwrap_or_default();
+            LazyJiraError::Parse(format!(
+                "Missing 'issues' or 'values' array. Available keys: {:?}",
+                available_keys
+            ))
+        })?;
 
     let mut tickets = Vec::new();
-    for issue in issues_array {
+    for (idx, issue) in issues_array.iter().enumerate() {
         match parse_issue(issue) {
             Ok(ticket) => tickets.push(ticket),
             Err(e) => {
-                // Log error but continue parsing other issues
-                eprintln!("Warning: Failed to parse issue: {:?}", e);
+                // Log error with more context
+                eprintln!(
+                    "Warning: Failed to parse issue at index {}: {:?}. Issue data: {:?}",
+                    idx,
+                    e,
+                    issue
+                );
             }
         }
     }

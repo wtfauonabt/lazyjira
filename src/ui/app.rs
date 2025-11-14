@@ -1,7 +1,9 @@
 use crate::domain::models::ticket::Ticket;
 use crate::infrastructure::api::ApiClient;
+use crate::infrastructure::api::client::{CreateIssueData, Transition};
 use crate::ui::components::ticket_detail::TicketDetail;
 use crate::ui::components::ticket_list::{TicketList, TicketListState};
+use crate::ui::components::transition_list::{TransitionList, TransitionListState};
 use crate::ui::events::{AppEvent, EventHandler};
 use crate::ui::renderer::Renderer;
 use crossterm::{
@@ -31,6 +33,8 @@ enum LoadingState {
 enum ViewMode {
     List,
     Detail,
+    Transitions,
+    CreateTicket,
 }
 
 /// Main UI application
@@ -46,6 +50,9 @@ pub struct App {
     view_mode: ViewMode,
     detail_ticket: Option<Ticket>,
     detail_loading: bool,
+    transition_list_state: TransitionListState,
+    transitions_loading: bool,
+    current_ticket_key: Option<String>,
 }
 
 impl App {
@@ -75,6 +82,9 @@ impl App {
             view_mode: ViewMode::List,
             detail_ticket: None,
             detail_loading: false,
+            transition_list_state: TransitionListState::new(),
+            transitions_loading: false,
+            current_ticket_key: None,
         })
     }
 
@@ -97,23 +107,100 @@ impl App {
                         self.load_tickets().await;
                     }
                     AppEvent::MoveUp => {
-                        self.ticket_list_state.move_up();
+                        match self.view_mode {
+                            ViewMode::List => {
+                                self.ticket_list_state.move_up();
+                            }
+                            ViewMode::Transitions => {
+                                self.transition_list_state.move_up();
+                            }
+                            _ => {}
+                        }
                     }
                     AppEvent::MoveDown => {
-                        self.ticket_list_state.move_down();
+                        match self.view_mode {
+                            ViewMode::List => {
+                                self.ticket_list_state.move_down();
+                            }
+                            ViewMode::Transitions => {
+                                self.transition_list_state.move_down();
+                            }
+                            _ => {}
+                        }
+                    }
+                    AppEvent::EnterDetail => {
+                        match self.view_mode {
+                            ViewMode::List => {
+                                self.open_detail_view().await;
+                            }
+                            ViewMode::Transitions => {
+                                // Execute selected transition
+                                if let Some(transition) = self.transition_list_state.focused_transition() {
+                                    if let Some(ticket_key) = &self.current_ticket_key {
+                                        if let Err(_e) = self.ticket_service.transition_issue(
+                                            ticket_key,
+                                            &transition.id,
+                                            None,
+                                        ).await {
+                                            // Error handling
+                                        } else {
+                                            // Refresh ticket and return to detail view
+                                            self.view_mode = ViewMode::Detail;
+                                            if let Ok(updated_ticket) = self.ticket_service.get_issue(ticket_key).await {
+                                                self.detail_ticket = Some(updated_ticket);
+                                            }
+                                            self.load_tickets().await;
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                     AppEvent::ToggleSelection => {
                         self.ticket_list_state.toggle_selection();
                     }
-                    AppEvent::EnterDetail => {
-                        if self.view_mode == ViewMode::List {
-                            self.open_detail_view().await;
+                    AppEvent::ExitDetail => {
+                        match self.view_mode {
+                            ViewMode::Detail | ViewMode::Transitions | ViewMode::CreateTicket => {
+                                self.view_mode = ViewMode::List;
+                                self.detail_ticket = None;
+                                self.transition_list_state = TransitionListState::new();
+                                self.current_ticket_key = None;
+                            }
+                            _ => {}
                         }
                     }
-                    AppEvent::ExitDetail => {
+                    AppEvent::AssignToMe => {
                         if self.view_mode == ViewMode::Detail {
-                            self.view_mode = ViewMode::List;
-                            self.detail_ticket = None;
+                            self.assign_to_me().await;
+                        }
+                    }
+                    AppEvent::StartProgress => {
+                        if self.view_mode == ViewMode::Detail {
+                            self.start_progress().await;
+                        }
+                    }
+                    AppEvent::Resolve => {
+                        if self.view_mode == ViewMode::Detail {
+                            self.resolve_ticket().await;
+                        }
+                    }
+                    AppEvent::ShowTransitions => {
+                        if self.view_mode == ViewMode::Detail {
+                            self.show_transitions().await;
+                        }
+                    }
+                    AppEvent::CreateTicket => {
+                        if self.view_mode == ViewMode::List {
+                            // TODO: Open create ticket form
+                            // For now, just show a message
+                        }
+                    }
+                    AppEvent::AddComment => {
+                        if self.view_mode == ViewMode::Detail {
+                            // TODO: Open comment input
+                            // For now, just show a message
                         }
                     }
                     _ => {
@@ -159,6 +246,7 @@ impl App {
             self.view_mode = ViewMode::Detail;
             self.detail_loading = true;
             self.detail_ticket = None;
+            self.current_ticket_key = Some(ticket_key.clone());
 
             // Fetch full ticket details
             match self.ticket_service.get_issue(&ticket_key).await {
@@ -171,6 +259,98 @@ impl App {
                     self.detail_ticket = Some(ticket.clone());
                     self.detail_loading = false;
                     // Could set an error state here if needed
+                }
+            }
+        }
+    }
+
+    /// Assign ticket to current user
+    async fn assign_to_me(&mut self) {
+        if let Some(ticket_key) = &self.current_ticket_key {
+            // Get current user from config or API
+            // For now, use a placeholder - in real implementation, get from config
+            let _assignee = "currentUser()"; // This would need to be the actual account ID
+            
+            // Update ticket assignee
+            // Note: This requires update_issue to be implemented
+            // For now, just refresh the ticket
+            if let Ok(updated_ticket) = self.ticket_service.get_issue(ticket_key).await {
+                self.detail_ticket = Some(updated_ticket);
+            }
+        }
+    }
+
+    /// Start progress (transition to In Progress)
+    async fn start_progress(&mut self) {
+        if let Some(ticket_key) = &self.current_ticket_key {
+            // Get transitions and find "Start Progress" or "In Progress"
+            if let Ok(transitions) = self.ticket_service.get_transitions(ticket_key).await {
+                if let Some(transition) = transitions.iter().find(|t| {
+                    t.name.to_lowercase().contains("start") || 
+                    t.to_status.to_lowercase().contains("progress")
+                }) {
+                    if let Err(_e) = self.ticket_service.transition_issue(
+                        ticket_key,
+                        &transition.id,
+                        None,
+                    ).await {
+                        // Error handling - could show message
+                    } else {
+                        // Refresh ticket after transition
+                        if let Ok(updated_ticket) = self.ticket_service.get_issue(ticket_key).await {
+                            self.detail_ticket = Some(updated_ticket);
+                            // Refresh list as well
+                            self.load_tickets().await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Resolve ticket
+    async fn resolve_ticket(&mut self) {
+        if let Some(ticket_key) = &self.current_ticket_key {
+            // Get transitions and find "Resolve" or "Done"
+            if let Ok(transitions) = self.ticket_service.get_transitions(ticket_key).await {
+                if let Some(transition) = transitions.iter().find(|t| {
+                    t.name.to_lowercase().contains("resolve") || 
+                    t.name.to_lowercase().contains("done") ||
+                    t.to_status.to_lowercase().contains("done")
+                }) {
+                    if let Err(_e) = self.ticket_service.transition_issue(
+                        ticket_key,
+                        &transition.id,
+                        None,
+                    ).await {
+                        // Error handling - could show message
+                    } else {
+                        // Refresh ticket after transition
+                        if let Ok(updated_ticket) = self.ticket_service.get_issue(ticket_key).await {
+                            self.detail_ticket = Some(updated_ticket);
+                            // Refresh list as well
+                            self.load_tickets().await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Show available transitions
+    async fn show_transitions(&mut self) {
+        if let Some(ticket_key) = &self.current_ticket_key {
+            self.view_mode = ViewMode::Transitions;
+            self.transitions_loading = true;
+            
+            match self.ticket_service.get_transitions(ticket_key).await {
+                Ok(transitions) => {
+                    self.transition_list_state.set_transitions(transitions);
+                    self.transitions_loading = false;
+                }
+                Err(_e) => {
+                    self.transitions_loading = false;
+                    // Could show error message
                 }
             }
         }
@@ -244,6 +424,31 @@ impl App {
                         ) {
                             eprintln!("Error rendering content: {}", e);
                         }
+                    }
+                }
+                ViewMode::Transitions => {
+                    // Render transitions list
+                    if self.transitions_loading {
+                        if let Err(e) = self.renderer.render_content_area(
+                            frame,
+                            chunks[1],
+                            "Loading transitions...",
+                        ) {
+                            eprintln!("Error rendering content: {}", e);
+                        }
+                    } else {
+                        let transition_list = TransitionList::new(&self.transition_list_state, self.renderer.theme());
+                        transition_list.render(frame, chunks[1]);
+                    }
+                }
+                ViewMode::CreateTicket => {
+                    // TODO: Render create ticket form
+                    if let Err(e) = self.renderer.render_content_area(
+                        frame,
+                        chunks[1],
+                        "Create ticket form (not yet implemented)",
+                    ) {
+                        eprintln!("Error rendering content: {}", e);
                     }
                 }
             }
