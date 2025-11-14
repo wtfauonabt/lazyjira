@@ -1,5 +1,6 @@
 pub mod ticket;
 pub mod user;
+pub mod comment;
 pub mod board;
 pub mod sprint;
 
@@ -8,3 +9,5 @@ pub mod sprint;
 pub use ticket::Ticket;
 #[allow(unused_imports)]
 pub use user::User;
+#[allow(unused_imports)]
+pub use comment::Comment;

@@ -1,8 +1,9 @@
 use super::client::{ApiClient, CreateIssueData, SearchResult, Transition, UpdateIssueData};
-use super::parser::parse_issue;
+use super::parser::{parse_comments, parse_issue};
 use super::rate_limiter::RateLimiter;
 use super::retry::{retry_with_backoff, RetryConfig};
 use crate::domain::models::ticket::Ticket;
+use crate::domain::models::comment::Comment;
 use crate::infrastructure::config::JiraCliConfig;
 use crate::utils::{LazyJiraError, Result};
 use base64::Engine;
@@ -473,5 +474,11 @@ impl ApiClient for JiraApiClient {
 
         self.post(&endpoint, &body).await?;
         Ok(())
+    }
+
+    async fn get_comments(&self, key: &str) -> Result<Vec<Comment>> {
+        let endpoint = format!("issue/{}/comment", key);
+        let json = self.get(&endpoint).await?;
+        parse_comments(&json)
     }
 }

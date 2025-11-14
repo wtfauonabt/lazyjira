@@ -1,4 +1,5 @@
 use crate::domain::models::ticket::Ticket;
+use crate::domain::models::comment::Comment;
 use crate::infrastructure::api::ApiClient;
 // CreateIssueData and Transition are used in method signatures but not directly referenced
 use crate::ui::components::ticket_detail::TicketDetail;
@@ -50,6 +51,7 @@ pub struct App {
     loading_state: LoadingState,
     view_mode: ViewMode,
     detail_ticket: Option<Ticket>,
+    detail_comments: Vec<Comment>,
     detail_loading: bool,
     transition_list_state: TransitionListState,
     transitions_loading: bool,
@@ -82,6 +84,7 @@ impl App {
             loading_state: LoadingState::Idle,
             view_mode: ViewMode::List,
             detail_ticket: None,
+            detail_comments: Vec::new(),
             detail_loading: false,
             transition_list_state: TransitionListState::new(),
             transitions_loading: false,
@@ -166,6 +169,7 @@ impl App {
                             ViewMode::Detail | ViewMode::Transitions | ViewMode::CreateTicket => {
                                 self.view_mode = ViewMode::List;
                                 self.detail_ticket = None;
+                                self.detail_comments = Vec::new();
                                 self.transition_list_state = TransitionListState::new();
                                 self.current_ticket_key = None;
                             }
@@ -247,21 +251,38 @@ impl App {
             self.view_mode = ViewMode::Detail;
             self.detail_loading = true;
             self.detail_ticket = None;
+            self.detail_comments = Vec::new();
             self.current_ticket_key = Some(ticket_key.clone());
 
-            // Fetch full ticket details
-            match self.ticket_service.get_issue(&ticket_key).await {
+            // Fetch full ticket details and comments in parallel
+            let ticket_future = self.ticket_service.get_issue(&ticket_key);
+            let comments_future = self.ticket_service.get_comments(&ticket_key);
+
+            // Wait for both to complete
+            let (ticket_result, comments_result) = tokio::join!(ticket_future, comments_future);
+
+            match ticket_result {
                 Ok(full_ticket) => {
                     self.detail_ticket = Some(full_ticket);
-                    self.detail_loading = false;
                 }
                 Err(_e) => {
                     // On error, use the ticket from list (may be incomplete)
                     self.detail_ticket = Some(ticket.clone());
-                    self.detail_loading = false;
                     // Could set an error state here if needed
                 }
             }
+
+            match comments_result {
+                Ok(comments) => {
+                    self.detail_comments = comments;
+                }
+                Err(_e) => {
+                    // On error, leave comments empty
+                    self.detail_comments = Vec::new();
+                }
+            }
+
+            self.detail_loading = false;
         }
     }
 
@@ -415,7 +436,7 @@ impl App {
                             eprintln!("Error rendering content: {}", e);
                         }
                     } else if let Some(ticket) = &self.detail_ticket {
-                        let detail = TicketDetail::new(ticket, self.renderer.theme());
+                        let detail = TicketDetail::new(ticket, &self.detail_comments, self.renderer.theme());
                         detail.render(frame, chunks[1]);
                     } else {
                         if let Err(e) = self.renderer.render_content_area(

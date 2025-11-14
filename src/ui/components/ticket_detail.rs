@@ -1,26 +1,46 @@
 use crate::domain::models::ticket::Ticket;
+use crate::domain::models::comment::Comment;
 use crate::ui::theme::Theme;
 use chrono::{DateTime, Utc};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
 /// Ticket detail widget
 pub struct TicketDetail<'a> {
     ticket: &'a Ticket,
+    comments: &'a [Comment],
     theme: &'a Theme,
 }
 
 impl<'a> TicketDetail<'a> {
-    pub fn new(ticket: &'a Ticket, theme: &'a Theme) -> Self {
-        Self { ticket, theme }
+    pub fn new(ticket: &'a Ticket, comments: &'a [Comment], theme: &'a Theme) -> Self {
+        Self { ticket, comments, theme }
     }
 
     /// Render the ticket detail view
     pub fn render(self, frame: &mut Frame, area: Rect) {
+        // Split horizontally: left for ticket details, right for comments
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(60), // Left: ticket details
+                Constraint::Percentage(40), // Right: comments sidebar
+            ])
+            .split(area);
+
+        // Render ticket details on the left
+        self.render_ticket_details(frame, horizontal_chunks[0]);
+        
+        // Render comments sidebar on the right
+        self.render_comments(frame, horizontal_chunks[1]);
+    }
+
+    /// Render ticket details (left side)
+    fn render_ticket_details(&self, frame: &mut Frame, area: Rect) {
         // Split into sections: header, fields, description, metadata
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -36,6 +56,60 @@ impl<'a> TicketDetail<'a> {
         self.render_fields(frame, chunks[1]);
         self.render_description(frame, chunks[2]);
         self.render_metadata(frame, chunks[3]);
+    }
+
+    /// Render comments sidebar (right side)
+    fn render_comments(&self, frame: &mut Frame, area: Rect) {
+        if self.comments.is_empty() {
+            let paragraph = Paragraph::new("No comments")
+                .style(self.theme.normal)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("Comments ({})", self.comments.len())),
+                );
+            frame.render_widget(paragraph, area);
+            return;
+        }
+
+        // Create list items for comments
+        let items: Vec<ListItem> = self
+            .comments
+            .iter()
+            .map(|comment| {
+                let author_name = &comment.author.display_name;
+                let created_str = format_date(&comment.created);
+                let body_preview = if comment.body.len() > 50 {
+                    format!("{}...", &comment.body[..50])
+                } else {
+                    comment.body.clone()
+                };
+
+                // Create a multi-line item
+                let lines = vec![
+                    Line::from(vec![
+                        Span::styled(
+                            format!("{} - ", author_name),
+                            self.theme.focused,
+                        ),
+                        Span::styled(created_str, self.theme.normal),
+                    ]),
+                    Line::from(vec![Span::styled(body_preview, self.theme.normal)]),
+                ];
+
+                ListItem::new(lines)
+            })
+            .collect();
+
+        let list = List::new(items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("Comments ({})", self.comments.len())),
+            )
+            .style(self.theme.normal);
+
+        frame.render_widget(list, area);
     }
 
     /// Render header with key and summary
@@ -185,8 +259,9 @@ mod tests {
     #[test]
     fn test_ticket_detail_creation() {
         let ticket = create_test_ticket();
+        let comments = Vec::new();
         let theme = Theme::default();
-        let detail = TicketDetail::new(&ticket, &theme);
+        let detail = TicketDetail::new(&ticket, &comments, &theme);
         
         assert_eq!(detail.ticket.key, "TEST-123");
     }

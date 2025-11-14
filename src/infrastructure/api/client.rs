@@ -39,6 +39,9 @@ pub trait ApiClient: Send + Sync {
     /// Add a comment to an issue
     #[allow(dead_code)] // Will be used when commenting is implemented
     async fn add_comment(&self, key: &str, comment: String) -> Result<()>;
+    
+    /// Get comments for an issue
+    async fn get_comments(&self, key: &str) -> Result<Vec<crate::domain::models::comment::Comment>>;
 }
 
 /// Search result with pagination
