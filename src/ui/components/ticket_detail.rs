@@ -2,7 +2,7 @@ use crate::domain::models::ticket::Ticket;
 use crate::ui::theme::Theme;
 use chrono::{DateTime, Utc};
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,

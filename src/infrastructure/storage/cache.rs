@@ -2,13 +2,16 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Simple in-memory cache with TTL
+#[allow(dead_code)] // Will be used for caching API responses
 pub struct Cache<K, V> {
     data: HashMap<K, CacheEntry<V>>,
+    #[allow(dead_code)] // Field used internally
     default_ttl: Duration,
 }
 
 struct CacheEntry<V> {
     value: V,
+    #[allow(dead_code)] // Field used internally
     expires_at: Instant,
 }
 
@@ -16,6 +19,7 @@ impl<K, V> Cache<K, V>
 where
     K: std::hash::Hash + Eq + Clone,
 {
+    #[allow(dead_code)] // Will be used for caching API responses
     pub fn new(default_ttl: Duration) -> Self {
         Self {
             data: HashMap::new(),
@@ -23,6 +27,7 @@ where
         }
     }
 
+    #[allow(dead_code)] // Will be used for caching API responses
     pub fn get(&self, key: &K) -> Option<&V> {
         self.data.get(key).and_then(|entry| {
             if entry.expires_at > Instant::now() {
@@ -33,10 +38,12 @@ where
         })
     }
 
+    #[allow(dead_code)] // Will be used for caching API responses
     pub fn insert(&mut self, key: K, value: V) {
         self.insert_with_ttl(key, value, self.default_ttl);
     }
 
+    #[allow(dead_code)] // Will be used for caching API responses
     pub fn insert_with_ttl(&mut self, key: K, value: V, ttl: Duration) {
         let entry = CacheEntry {
             value,
@@ -55,6 +62,7 @@ where
         self.data.clear();
     }
 
+    #[allow(dead_code)] // Will be used for caching API responses
     pub fn cleanup_expired(&mut self) {
         let now = Instant::now();
         self.data.retain(|_, entry| entry.expires_at > now);

@@ -16,8 +16,11 @@ pub struct Theme {
     pub priority_medium: Style,
     pub priority_high: Style,
     pub priority_highest: Style,
+    #[allow(dead_code)] // Will be used for error messages
     pub error: Style,
+    #[allow(dead_code)] // Will be used for success messages
     pub success: Style,
+    #[allow(dead_code)] // Will be used for warning messages
     pub warning: Style,
 }
 

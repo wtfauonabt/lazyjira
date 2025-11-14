@@ -1,4 +1,4 @@
-use crate::utils::{LazyJiraError, Result};
+use crate::utils::Result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -70,6 +70,7 @@ impl RateLimiter {
     }
 
     /// Try to acquire a token without waiting (non-blocking)
+    #[allow(dead_code)] // Will be used for non-blocking operations
     pub async fn try_acquire_token(&self) -> bool {
         let mut tokens = self.tokens.lock().await;
         let mut last_refill = self.last_refill.lock().await;

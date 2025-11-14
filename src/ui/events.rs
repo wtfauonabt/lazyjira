@@ -15,6 +15,7 @@ pub enum AppEvent {
     /// Move selection right
     MoveRight,
     /// Select current item
+    #[allow(dead_code)] // Will be used for selection operations
     Select,
     /// Toggle selection
     ToggleSelection,

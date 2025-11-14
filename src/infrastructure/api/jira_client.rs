@@ -152,6 +152,7 @@ impl JiraApiClient {
     }
 
     /// Make an authenticated PUT request
+    #[allow(dead_code)] // Will be used when update_issue is fully implemented
     async fn put(&self, endpoint: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
         let url = format!("{}/{}", self.base_url, endpoint);
         let response = self

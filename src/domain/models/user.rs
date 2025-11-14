@@ -9,6 +9,7 @@ pub struct User {
 }
 
 impl User {
+    #[allow(dead_code)] // Used in tests
     pub fn new(account_id: String, display_name: String) -> Self {
         Self {
             account_id,

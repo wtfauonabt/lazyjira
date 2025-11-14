@@ -50,6 +50,7 @@ pub enum Priority {
 
 impl Ticket {
     /// Create a new ticket (for testing)
+    #[allow(dead_code)] // Used in tests
     pub fn new(
         key: String,
         summary: String,
@@ -72,16 +73,19 @@ impl Ticket {
     }
 
     /// Check if ticket is in "Done" status category
+    #[allow(dead_code)] // Will be used for filtering
     pub fn is_done(&self) -> bool {
         matches!(self.status.category, StatusCategory::Done)
     }
 
     /// Check if ticket is in "In Progress" status category
+    #[allow(dead_code)] // Will be used for filtering
     pub fn is_in_progress(&self) -> bool {
         matches!(self.status.category, StatusCategory::InProgress)
     }
 
     /// Check if ticket is in "To Do" status category
+    #[allow(dead_code)] // Will be used for filtering
     pub fn is_todo(&self) -> bool {
         matches!(self.status.category, StatusCategory::ToDo)
     }

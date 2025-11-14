@@ -5,22 +5,26 @@ use crate::utils::Result;
 use std::sync::Arc;
 
 /// Service for ticket operations
+#[allow(dead_code)] // Will be used when service layer is integrated
 pub struct TicketService {
     api_client: Arc<dyn ApiClient>,
 }
 
 impl TicketService {
     /// Create a new ticket service
+    #[allow(dead_code)] // Will be used when service layer is integrated
     pub fn new(api_client: Arc<dyn ApiClient>) -> Self {
         Self { api_client }
     }
 
     /// Get a ticket by key
+    #[allow(dead_code)] // Will be used when service layer is integrated
     pub async fn get_ticket(&self, key: &str) -> Result<Ticket> {
         self.api_client.get_issue(key).await
     }
 
     /// Create a new ticket
+    #[allow(dead_code)] // Will be used when service layer is integrated
     pub async fn create_ticket(&self, data: CreateIssueData) -> Result<Ticket> {
         // Validate data before creating
         if data.summary.trim().is_empty() {
@@ -39,6 +43,7 @@ impl TicketService {
     }
 
     /// Search tickets using JQL
+    #[allow(dead_code)] // Will be used when service layer is integrated
     pub async fn search_tickets(
         &self,
         jql: &str,

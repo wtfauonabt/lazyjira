@@ -16,6 +16,7 @@ pub trait ApiClient: Send + Sync {
     ) -> Result<SearchResult>;
     
     /// Create a new issue
+    #[allow(dead_code)] // Will be used when ticket creation UI is implemented
     async fn create_issue(&self, data: CreateIssueData) -> Result<Ticket>;
     
     /// Update an existing issue
@@ -44,6 +45,7 @@ pub trait ApiClient: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub start_at: usize,
+    #[allow(dead_code)] // Field available for future use
     pub max_results: usize,
     pub total: usize,
     pub issues: Vec<Ticket>,
@@ -63,6 +65,7 @@ impl SearchResult {
 
 /// Data for creating a new issue
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Will be used when ticket creation UI is implemented
 pub struct CreateIssueData {
     pub project_key: String,
     #[allow(dead_code)] // Will be used when create issue is fully implemented

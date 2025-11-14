@@ -1,6 +1,6 @@
 use crate::domain::models::ticket::Ticket;
 use crate::infrastructure::api::ApiClient;
-use crate::infrastructure::api::client::{CreateIssueData, Transition};
+// CreateIssueData and Transition are used in method signatures but not directly referenced
 use crate::ui::components::ticket_detail::TicketDetail;
 use crate::ui::components::ticket_list::{TicketList, TicketListState};
 use crate::ui::components::transition_list::{TransitionList, TransitionListState};
@@ -15,7 +15,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
 };
-use std::io::{self, stdout, Stdout};
+use std::io::{stdout, Stdout};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -34,6 +34,7 @@ enum ViewMode {
     List,
     Detail,
     Transitions,
+    #[allow(dead_code)] // Will be used when ticket creation form is implemented
     CreateTicket,
 }
 
@@ -254,7 +255,7 @@ impl App {
                     self.detail_ticket = Some(full_ticket);
                     self.detail_loading = false;
                 }
-                Err(e) => {
+                Err(_e) => {
                     // On error, use the ticket from list (may be incomplete)
                     self.detail_ticket = Some(ticket.clone());
                     self.detail_loading = false;

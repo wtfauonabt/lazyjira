@@ -10,6 +10,7 @@ pub enum LazyJiraError {
     Authentication(String),
 
     #[error("Validation error: {0}")]
+    #[allow(dead_code)] // Will be used for validation errors
     Validation(String),
 
     #[error("API error: {0}")]
@@ -25,6 +26,7 @@ pub enum LazyJiraError {
     Parse(String),
 
     #[error("Internal error: {0}")]
+    #[allow(dead_code)] // Will be used for internal errors
     Internal(String),
 }
 

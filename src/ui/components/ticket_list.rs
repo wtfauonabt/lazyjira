@@ -141,7 +141,7 @@ impl<'a> TicketList<'a> {
     }
 
     /// Create a list item for a ticket
-    fn create_list_item(&self, idx: usize, ticket: &Ticket) -> ListItem {
+    fn create_list_item(&self, idx: usize, ticket: &Ticket) -> ListItem<'_> {
         let is_selected = self.state.selected_indices.contains(&idx);
         let is_focused = self.state.focused_index == Some(idx);
 

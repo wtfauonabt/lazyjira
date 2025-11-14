@@ -6,7 +6,6 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     Frame,
 };
-use std::collections::HashSet;
 
 /// State for transition list widget
 #[derive(Debug, Clone)]
@@ -94,8 +93,7 @@ impl<'a> TransitionList<'a> {
             .transitions
             .iter()
             .enumerate()
-            .map(|(idx, transition)| {
-                let is_focused = self.state.focused_index == Some(idx);
+            .map(|(_idx, transition)| {
                 let text = format!("{} → {}", transition.name, transition.to_status);
                 ListItem::new(Line::from(text))
             })

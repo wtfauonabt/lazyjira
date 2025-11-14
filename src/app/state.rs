@@ -10,6 +10,7 @@ pub struct AppState {
     pub selected_indices: HashSet<usize>,
     
     /// Currently focused ticket index
+    #[allow(dead_code)] // Alternative state management - not currently used
     pub focused_index: Option<usize>,
     
     /// Current filter/search query
@@ -17,6 +18,7 @@ pub struct AppState {
     pub filter_query: Option<String>,
     
     /// Current view mode
+    #[allow(dead_code)] // Alternative state management - not currently used
     pub view_mode: ViewMode,
 }
 
@@ -42,11 +44,13 @@ impl Default for AppState {
 }
 
 impl AppState {
+    #[allow(dead_code)] // Alternative state management - not currently used
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Get the focused ticket
+    #[allow(dead_code)] // Alternative state management - not currently used
     pub fn focused_ticket(&self) -> Option<&Ticket> {
         self.focused_index
             .and_then(|idx| self.tickets.get(idx))
@@ -62,6 +66,7 @@ impl AppState {
     }
 
     /// Toggle selection of focused ticket
+    #[allow(dead_code)] // Alternative state management - not currently used
     pub fn toggle_selection(&mut self) {
         if let Some(idx) = self.focused_index {
             if self.selected_indices.contains(&idx) {

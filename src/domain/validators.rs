@@ -1,6 +1,7 @@
 use crate::utils::{LazyJiraError, Result};
 
 /// Validate Jira instance URL
+#[allow(dead_code)] // Will be used for validation
 pub fn validate_instance(instance: &str) -> Result<()> {
     if instance.trim().is_empty() {
         return Err(LazyJiraError::Validation(
@@ -19,6 +20,7 @@ pub fn validate_instance(instance: &str) -> Result<()> {
 }
 
 /// Validate ticket key format (e.g., PROJ-123)
+#[allow(dead_code)] // Will be used for validation
 pub fn validate_ticket_key(key: &str) -> Result<()> {
     if key.trim().is_empty() {
         return Err(LazyJiraError::Validation(

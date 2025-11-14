@@ -1,10 +1,12 @@
 use crate::domain::models::ticket::{StatusCategory, Ticket};
 
 /// Service for filtering tickets
+#[allow(dead_code)] // Will be used when filtering is implemented
 pub struct FilterService;
 
 impl FilterService {
     /// Filter tickets by status category
+    #[allow(dead_code)] // Will be used when filtering is implemented
     pub fn filter_by_status_category(
         tickets: &[Ticket],
         category: StatusCategory,
@@ -17,6 +19,7 @@ impl FilterService {
     }
 
     /// Filter tickets assigned to a user
+    #[allow(dead_code)] // Will be used when filtering is implemented
     pub fn filter_by_assignee(tickets: &[Ticket], account_id: &str) -> Vec<Ticket> {
         tickets
             .iter()
@@ -32,6 +35,7 @@ impl FilterService {
     }
 
     /// Filter tickets by text search in summary
+    #[allow(dead_code)] // Will be used when filtering is implemented
     pub fn filter_by_text(tickets: &[Ticket], query: &str) -> Vec<Ticket> {
         let query_lower = query.to_lowercase();
         tickets

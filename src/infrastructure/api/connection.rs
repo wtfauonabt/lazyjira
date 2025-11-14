@@ -14,6 +14,7 @@ pub enum ConnectionStatus {
 }
 
 impl ConnectionStatus {
+    #[allow(dead_code)] // Will be used for connection status checks
     pub fn is_connected(&self) -> bool {
         matches!(self, ConnectionStatus::Connected)
     }

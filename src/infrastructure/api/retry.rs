@@ -83,6 +83,7 @@ where
 }
 
 /// Check if an error is retryable
+#[allow(dead_code)] // Will be used for advanced retry logic
 pub fn is_retryable_error(error: &LazyJiraError) -> bool {
     match error {
         LazyJiraError::Network(_) => true,
