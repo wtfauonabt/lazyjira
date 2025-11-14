@@ -1,5 +1,5 @@
 use super::client::{ApiClient, CreateIssueData, SearchResult, Transition, UpdateIssueData};
-use super::parser::{parse_issue, parse_search_results};
+use super::parser::parse_issue;
 use super::rate_limiter::RateLimiter;
 use super::retry::{retry_with_backoff, RetryConfig};
 use crate::domain::models::ticket::Ticket;
@@ -134,21 +134,51 @@ impl JiraApiClient {
         .await
     }
 
-    /// Make an authenticated POST request
+    /// Make an authenticated POST request with rate limiting and retry
     async fn post(&self, endpoint: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
-        let url = format!("{}/{}", self.base_url, endpoint);
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", &self.auth_header)
-            .header("Accept", "application/json")
-            .header("Content-Type", "application/json")
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| LazyJiraError::Network(e))?;
+        // Wait for rate limiter token
+        self.rate_limiter.wait_for_token().await?;
 
-        self.handle_response(response).await
+        // Retry with exponential backoff
+        let url = format!("{}/{}", self.base_url, endpoint);
+        let auth_header = self.auth_header.clone();
+        let client = self.client.clone();
+        let body = body.clone();
+        
+        retry_with_backoff(&self.retry_config, move || {
+            let url = url.clone();
+            let auth_header = auth_header.clone();
+            let client = client.clone();
+            let body = body.clone();
+            async move {
+                let response = client
+                    .post(&url)
+                    .header("Authorization", &auth_header)
+                    .header("Accept", "application/json")
+                    .header("Content-Type", "application/json")
+                    .json(&body)
+                    .send()
+                    .await
+                    .map_err(|e| LazyJiraError::Network(e))?;
+
+                let status = response.status();
+                if status.is_success() {
+                    response
+                        .json()
+                        .await
+                        .map_err(|e| LazyJiraError::Network(e))
+                } else {
+                    let error_text = response.text().await.unwrap_or_default();
+                    Err(LazyJiraError::Api(format!(
+                        "API error ({} {}): {}",
+                        status.as_u16(),
+                        status.as_str(),
+                        error_text
+                    )))
+                }
+            }
+        })
+        .await
     }
 
     /// Make an authenticated PUT request
@@ -216,25 +246,82 @@ impl ApiClient for JiraApiClient {
         start_at: usize,
         max_results: usize,
     ) -> Result<SearchResult> {
-        // Use the standard /search endpoint (still supported, /search/jql is for POST requests)
-        // The /search endpoint with JQL query parameter is still the recommended approach
+        // The old GET /rest/api/3/search?jql=... endpoint has been removed
+        // We now use POST /rest/api/3/search/jql as specified in the migration guide
+        // See: https://developer.atlassian.com/changelog/#CHANGE-2046
+        // The /search/jql endpoint returns issue IDs, which we then expand to full issue details
         let endpoint = format!(
-            "search?jql={}&startAt={}&maxResults={}",
+            "search/jql?jql={}&startAt={}&maxResults={}",
             urlencoding::encode(jql),
             start_at,
             max_results
         );
+        
         let json = self.get(&endpoint).await?;
         
-        // Parse search result
-        let (parsed_start_at, parsed_max_results, total, issues) =
-            parse_search_results(&json)?;
+        // The /search/jql endpoint returns a different format - it returns issue IDs in a "values" array
+        // We need to fetch full issue details for each ID
+        let issue_ids: Vec<String> = json
+            .get("values")
+            .or_else(|| json.get("issues"))
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                let available_keys: Vec<String> = json
+                    .as_object()
+                    .map(|obj| obj.keys().map(|k| k.clone()).collect())
+                    .unwrap_or_default();
+                LazyJiraError::Parse(format!(
+                    "Missing 'values' or 'issues' array in search/jql response. Available keys: {:?}",
+                    available_keys
+                ))
+            })?
+            .iter()
+            .filter_map(|item| {
+                // Handle both formats: {"id": "123"} or full issue objects
+                if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+                    Some(id.to_string())
+                } else if let Some(id) = item.as_str() {
+                    Some(id.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        // Fetch full issue details for each ID
+        // Note: Jira API accepts both issue keys (PROJ-123) and numeric IDs
+        // The /search/jql endpoint returns numeric IDs, so we fetch them directly
+        let mut tickets = Vec::new();
+        for issue_id in issue_ids {
+            // Use get_issue which accepts both keys and IDs
+            match self.get_issue(&issue_id).await {
+                Ok(ticket) => tickets.push(ticket),
+                Err(e) => {
+                    eprintln!("Warning: Failed to fetch issue {}: {:?}", issue_id, e);
+                }
+            }
+        }
+        
+        let start_at = json
+            .get("startAt")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(start_at as u64) as usize;
+        
+        let max_results = json
+            .get("maxResults")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(max_results as u64) as usize;
+        
+        let total = json
+            .get("total")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(tickets.len() as u64) as usize;
         
         Ok(SearchResult {
-            start_at: parsed_start_at,
-            max_results: parsed_max_results,
+            start_at,
+            max_results,
             total,
-            issues,
+            issues: tickets,
         })
     }
 

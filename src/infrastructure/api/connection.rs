@@ -41,12 +41,13 @@ pub struct ConnectionValidator;
 
 impl ConnectionValidator {
     /// Test connection to Jira instance
-    /// Uses the current user endpoint as a lightweight connectivity test
+    /// Uses a simple search query as a lightweight connectivity test
     pub async fn test_connection(client: &dyn ApiClient) -> ConnectionStatus {
         info!("Testing connection to Jira instance...");
         
-        // Try to get current user by searching for issues assigned to current user
-        // This is a lightweight operation that validates auth
+        // Try a simple search query to validate auth and connection
+        // Using a bounded JQL query (the /search/jql endpoint requires bounded queries)
+        // Search for issues assigned to current user, which is a valid bounded query
         match client.search_issues("assignee = currentUser() ORDER BY updated DESC", 0, 1).await {
             Ok(_) => {
                 info!("Connection test successful");

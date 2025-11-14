@@ -275,6 +275,8 @@ fn parse_datetime(fields: &Value, field_name: &str) -> Result<DateTime<Utc>> {
 }
 
 /// Parse search results from Jira search API response
+/// Note: This function is kept for potential future use or testing
+#[allow(dead_code)]
 pub fn parse_search_results(json: &Value) -> Result<(usize, usize, usize, Vec<Ticket>)> {
     let start_at = json
         .get("startAt")
