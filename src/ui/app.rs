@@ -104,7 +104,6 @@ impl App {
             // Draw UI
             if let Err(e) = self.draw() {
                 log::error!("run: Error in draw(): {}", e);
-                eprintln!("Error drawing UI: {}", e);
             }
 
             // Handle events with timeout
@@ -155,10 +154,8 @@ impl App {
                         match self.view_mode {
                             ViewMode::List => {
                                 log::debug!("run: Calling open_detail_view()");
-                                eprintln!("DEBUG: About to call open_detail_view()");
                                 self.open_detail_view().await;
                                 log::debug!("run: open_detail_view() completed");
-                                eprintln!("DEBUG: open_detail_view() completed");
                             }
                             ViewMode::Transitions => {
                                 // Execute selected transition
@@ -443,7 +440,7 @@ impl App {
             
             // Open the URL in the default browser
             if let Err(e) = open::that(&url) {
-                eprintln!("Failed to open browser: {}", e);
+                log::error!("Failed to open browser: {}", e);
             }
         }
     }
@@ -455,7 +452,7 @@ impl App {
             
             // Render main layout
             if let Err(e) = self.renderer.render_main_layout(frame, area, &self.connection_status) {
-                eprintln!("Error rendering: {}", e);
+                log::error!("Error rendering: {}", e);
             }
 
             // Content area is already split in render_main_layout
@@ -480,12 +477,12 @@ impl App {
                                 chunks[1],
                                 "Loading tickets...",
                             ) {
-                                eprintln!("Error rendering content: {}", e);
+                                log::error!("Error rendering content: {}", e);
                             }
                         }
                         LoadingState::Error(msg) => {
                             if let Err(e) = self.renderer.render_content_area(frame, chunks[1], msg) {
-                                eprintln!("Error rendering content: {}", e);
+                                log::error!("Error rendering content: {}", e);
                             }
                         }
                         _ => {
@@ -506,7 +503,6 @@ impl App {
                             "Loading ticket details...",
                         ) {
                             log::error!("draw: Error rendering loading content: {}", e);
-                            eprintln!("Error rendering content: {}", e);
                         }
                     } else if let Some(ticket) = &self.detail_ticket {
                         log::debug!("draw: Rendering ticket detail for {}", ticket.key);
@@ -523,7 +519,6 @@ impl App {
                             "No ticket selected.",
                         ) {
                             log::error!("draw: Error rendering 'no ticket' content: {}", e);
-                            eprintln!("Error rendering content: {}", e);
                         }
                     }
                 }
@@ -535,7 +530,7 @@ impl App {
                             chunks[1],
                             "Loading transitions...",
                         ) {
-                            eprintln!("Error rendering content: {}", e);
+                            log::error!("draw: Error rendering loading content: {}", e);
                         }
                     } else {
                         let transition_list = TransitionList::new(&self.transition_list_state, self.renderer.theme());
@@ -549,7 +544,7 @@ impl App {
                         chunks[1],
                         "Create ticket form (not yet implemented)",
                     ) {
-                        eprintln!("Error rendering content: {}", e);
+                        log::error!("draw: Error rendering loading content: {}", e);
                     }
                 }
             }
