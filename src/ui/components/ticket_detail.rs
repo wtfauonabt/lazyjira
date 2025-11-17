@@ -23,7 +23,11 @@ impl<'a> TicketDetail<'a> {
 
     /// Render the ticket detail view
     pub fn render(self, frame: &mut Frame, area: Rect) {
+        log::debug!("TicketDetail::render: Starting render for ticket {}", self.ticket.key);
+        log::debug!("TicketDetail::render: Area: {:?}, Comments: {}", area, self.comments.len());
+        
         // Split horizontally: left for ticket details, right for comments
+        log::debug!("TicketDetail::render: Creating horizontal layout");
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -31,12 +35,18 @@ impl<'a> TicketDetail<'a> {
                 Constraint::Percentage(40), // Right: comments sidebar
             ])
             .split(area);
+        log::debug!("TicketDetail::render: Layout split into {} chunks", horizontal_chunks.len());
 
         // Render ticket details on the left
+        log::debug!("TicketDetail::render: Rendering ticket details");
         self.render_ticket_details(frame, horizontal_chunks[0]);
+        log::debug!("TicketDetail::render: Ticket details rendered");
         
         // Render comments sidebar on the right
-        self.render_comments(frame, horizontal_chunks[1]);
+        //log::debug!("TicketDetail::render: Rendering comments sidebar");
+        //self.render_comments(frame, horizontal_chunks[1]);
+        //log::debug!("TicketDetail::render: Comments sidebar rendered");
+        //log::debug!("TicketDetail::render: Render completed");
     }
 
     /// Render ticket details (left side)

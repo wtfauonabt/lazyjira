@@ -277,28 +277,91 @@ fn parse_datetime(fields: &Value, field_name: &str) -> Result<DateTime<Utc>> {
 
 /// Parse comments from Jira comments API response
 pub fn parse_comments(json: &Value) -> Result<Vec<Comment>> {
-    let comments_array = json
-        .get("comments")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| LazyJiraError::Parse("Missing 'comments' array".to_string()))?;
+    log::debug!("parse_comments: Starting to parse comments");
+    log::debug!("parse_comments: JSON type: {}", if json.is_array() { "array" } else if json.is_object() { "object" } else { "other" });
+    
+    // The Jira comments API returns a response with a "comments" array
+    // Handle both direct array response and wrapped response
+    let comments_array = if json.is_array() {
+        log::debug!("parse_comments: Response is an array");
+        // If the response is directly an array
+        json.as_array().ok_or_else(|| {
+            LazyJiraError::Parse("Expected array or object with 'comments' field".to_string())
+        })?
+    } else {
+        log::debug!("parse_comments: Response is an object, looking for 'comments' field");
+        // If the response is an object with a "comments" field
+        match json.get("comments") {
+            Some(comments_val) => {
+                log::debug!("parse_comments: Found 'comments' field");
+                if let Some(arr) = comments_val.as_array() {
+                    log::debug!("parse_comments: 'comments' is an array with {} items", arr.len());
+                    arr
+                } else {
+                    let available_keys: Vec<String> = json
+                        .as_object()
+                        .map(|obj| obj.keys().map(|k| k.clone()).collect())
+                        .unwrap_or_default();
+                    log::error!("parse_comments: 'comments' field is not an array. Available keys: {:?}", available_keys);
+                    return Err(LazyJiraError::Parse(format!(
+                        "'comments' field is not an array. Available keys: {:?}",
+                        available_keys
+                    )));
+                }
+            }
+            None => {
+                let available_keys: Vec<String> = json
+                    .as_object()
+                    .map(|obj| obj.keys().map(|k| k.clone()).collect())
+                    .unwrap_or_default();
+                log::error!("parse_comments: Missing 'comments' field. Available keys: {:?}", available_keys);
+                return Err(LazyJiraError::Parse(format!(
+                    "Missing 'comments' array in response. Available keys: {:?}",
+                    available_keys
+                )));
+            }
+        }
+    };
+    
+    log::debug!("parse_comments: Processing {} comments", comments_array.len());
 
     let mut comments = Vec::new();
-    for comment_json in comments_array {
-        let id = comment_json
+    for (idx, comment_json) in comments_array.iter().enumerate() {
+        log::debug!("parse_comments: Processing comment at index {}", idx);
+        
+        // Skip invalid comments instead of failing completely
+        let id = match comment_json
             .get("id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| LazyJiraError::Parse("Missing comment 'id' field".to_string()))?
-            .to_string();
+        {
+            Some(id_str) => {
+                log::debug!("parse_comments: Comment {} has id: {}", idx, id_str);
+                id_str.to_string()
+            }
+            None => {
+                log::warn!("parse_comments: Skipping comment at index {}: missing 'id' field", idx);
+                continue;
+            }
+        };
 
-        let author_obj = comment_json
-            .get("author")
-            .ok_or_else(|| LazyJiraError::Parse("Missing comment 'author' field".to_string()))?;
+        let author_obj = match comment_json.get("author") {
+            Some(author) => author,
+            None => {
+                eprintln!("Warning: Skipping comment {}: missing 'author' field", id);
+                continue;
+            }
+        };
 
-        let account_id = author_obj
+        let account_id = match author_obj
             .get("accountId")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| LazyJiraError::Parse("Missing author 'accountId' field".to_string()))?
-            .to_string();
+        {
+            Some(account_id_str) => account_id_str.to_string(),
+            None => {
+                eprintln!("Warning: Skipping comment {}: missing author 'accountId' field", id);
+                continue;
+            }
+        };
 
         let display_name = author_obj
             .get("displayName")
@@ -317,22 +380,30 @@ pub fn parse_comments(json: &Value) -> Result<Vec<Comment>> {
             email_address,
         };
 
-        let body_obj = comment_json
-            .get("body")
-            .ok_or_else(|| LazyJiraError::Parse("Missing comment 'body' field".to_string()))?;
-
         // Extract text from Atlassian Document Format
         let mut body_parts = Vec::new();
-        if let Some(content) = body_obj.get("content").and_then(|c| c.as_array()) {
-            extract_text_from_adf(content, &mut body_parts);
+        if let Some(body_obj) = comment_json.get("body") {
+            if let Some(content) = body_obj.get("content").and_then(|c| c.as_array()) {
+                extract_text_from_adf(content, &mut body_parts);
+            }
+        } else {
+            eprintln!("Warning: Comment {} has no body, using empty string", id);
         }
+        
         let body = if body_parts.is_empty() {
             "".to_string()
         } else {
             body_parts.join("\n")
         };
 
-        let created = parse_datetime(comment_json, "created")?;
+        let created = match parse_datetime(comment_json, "created") {
+            Ok(dt) => dt,
+            Err(e) => {
+                eprintln!("Warning: Skipping comment {}: failed to parse 'created' datetime: {}", id, e);
+                continue;
+            }
+        };
+        
         let updated = comment_json
             .get("updated")
             .and_then(|v| v.as_str())
@@ -347,8 +418,10 @@ pub fn parse_comments(json: &Value) -> Result<Vec<Comment>> {
             created,
             updated,
         });
+        log::debug!("parse_comments: Successfully parsed comment {}", comments.len());
     }
 
+    log::debug!("parse_comments: Successfully parsed {} comments total", comments.len());
     Ok(comments)
 }
 

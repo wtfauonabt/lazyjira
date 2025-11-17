@@ -108,8 +108,6 @@ mod tests {
     use crate::infrastructure::api::client::SearchResult;
     use crate::domain::models::ticket::Ticket;
     use async_trait::async_trait;
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     // Mock API client for testing
     struct MockApiClient {
@@ -182,6 +180,10 @@ mod tests {
 
         async fn add_comment(&self, _key: &str, _comment: String) -> Result<()> {
             Err(LazyJiraError::Internal("Not implemented".to_string()))
+        }
+
+        async fn get_comments(&self, _key: &str) -> Result<Vec<crate::domain::models::comment::Comment>> {
+            Ok(vec![])
         }
     }
 

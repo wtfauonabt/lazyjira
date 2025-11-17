@@ -143,6 +143,10 @@ mod tests {
         async fn add_comment(&self, _key: &str, _comment: String) -> Result<()> {
             Ok(())
         }
+
+        async fn get_comments(&self, _key: &str) -> Result<Vec<crate::domain::models::comment::Comment>> {
+            Ok(vec![])
+        }
     }
 
     #[tokio::test]

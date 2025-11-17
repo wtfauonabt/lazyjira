@@ -234,11 +234,32 @@ impl JiraApiClient {
 #[async_trait::async_trait]
 impl ApiClient for JiraApiClient {
     async fn get_issue(&self, key: &str) -> Result<Ticket> {
+        log::debug!("get_issue: Fetching issue {}", key);
         let endpoint = format!("issue/{}", key);
-        let json = self.get(&endpoint).await?;
+        log::debug!("get_issue: Calling endpoint {}", endpoint);
         
-        // Parse ticket from JSON response
-        parse_issue(&json)
+        let json = match self.get(&endpoint).await {
+            Ok(json) => {
+                log::debug!("get_issue: Successfully received JSON response for {}", key);
+                json
+            }
+            Err(e) => {
+                log::error!("get_issue: Failed to fetch {}: {}", key, e);
+                return Err(e);
+            }
+        };
+        
+        log::debug!("get_issue: Parsing issue from JSON");
+        match parse_issue(&json) {
+            Ok(ticket) => {
+                log::debug!("get_issue: Successfully parsed ticket {}", ticket.key);
+                Ok(ticket)
+            }
+            Err(e) => {
+                log::error!("get_issue: Failed to parse ticket {}: {}", key, e);
+                Err(e)
+            }
+        }
     }
 
     async fn search_issues(
@@ -477,8 +498,31 @@ impl ApiClient for JiraApiClient {
     }
 
     async fn get_comments(&self, key: &str) -> Result<Vec<Comment>> {
+        log::debug!("get_comments: Fetching comments for issue {}", key);
         let endpoint = format!("issue/{}/comment", key);
-        let json = self.get(&endpoint).await?;
-        parse_comments(&json)
+        log::debug!("get_comments: Calling endpoint {}", endpoint);
+        
+        let json = match self.get(&endpoint).await {
+            Ok(json) => {
+                log::debug!("get_comments: Successfully received JSON response for {}", key);
+                json
+            }
+            Err(e) => {
+                log::error!("get_comments: Failed to fetch comments for {}: {}", key, e);
+                return Err(e);
+            }
+        };
+        
+        log::debug!("get_comments: Parsing comments from JSON");
+        match parse_comments(&json) {
+            Ok(comments) => {
+                log::debug!("get_comments: Successfully parsed {} comments", comments.len());
+                Ok(comments)
+            }
+            Err(e) => {
+                log::error!("get_comments: Failed to parse comments for {}: {}", key, e);
+                Err(e)
+            }
+        }
     }
 }

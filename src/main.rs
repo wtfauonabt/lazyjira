@@ -10,8 +10,37 @@ use utils::logger;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logger
-    logger::init_logger(log::LevelFilter::Info);
+    // Initialize logger - use Info level by default, can be overridden with RUST_LOG env var
+    // Set to Debug for troubleshooting: RUST_LOG=debug cargo run
+    let log_level = std::env::var("RUST_LOG")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(log::LevelFilter::Info);
+    logger::init_logger(log_level);
+    
+    // Set up panic hook to log panics
+    std::panic::set_hook(Box::new(|panic_info| {
+        let location = panic_info.location()
+            .map(|loc| format!("{}:{}:{}", loc.file(), loc.line(), loc.column()))
+            .unwrap_or_else(|| "unknown location".to_string());
+        
+        let message = panic_info.payload()
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| {
+                panic_info.payload()
+                    .downcast_ref::<String>()
+                    .map(|s| s.clone())
+            })
+            .unwrap_or_else(|| "unknown panic".to_string());
+        
+        eprintln!("\n=== PANIC OCCURRED ===");
+        eprintln!("Location: {}", location);
+        eprintln!("Message: {}", message);
+        eprintln!("=====================\n");
+        
+        log::error!("PANIC at {}: {}", location, message);
+    }));
 
     println!("LazyJira starting...\n");
 
@@ -43,7 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             // Initialize UI and start application
                             let client: std::sync::Arc<dyn infrastructure::api::ApiClient> = 
                                 std::sync::Arc::new(client);
-                            let mut app = ui::App::new("Connected".to_string(), client)?;
+                            let instance_url = jira_cli_config.instance.clone();
+                            let mut app = ui::App::new("Connected".to_string(), client, instance_url)?;
                             app.run().await?;
                         }
                         _ => {

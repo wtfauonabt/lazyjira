@@ -56,6 +56,7 @@ pub struct App {
     transition_list_state: TransitionListState,
     transitions_loading: bool,
     current_ticket_key: Option<String>,
+    instance_url: String,
 }
 
 impl App {
@@ -63,6 +64,7 @@ impl App {
     pub fn new(
         connection_status: String,
         ticket_service: Arc<dyn ApiClient>,
+        instance_url: String,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // Setup terminal
         enable_raw_mode()?;
@@ -89,6 +91,7 @@ impl App {
             transition_list_state: TransitionListState::new(),
             transitions_loading: false,
             current_ticket_key: None,
+            instance_url,
         })
     }
 
@@ -99,15 +102,30 @@ impl App {
 
         while self.running {
             // Draw UI
-            self.draw()?;
+            if let Err(e) = self.draw() {
+                log::error!("run: Error in draw(): {}", e);
+                eprintln!("Error drawing UI: {}", e);
+            }
 
             // Handle events with timeout
             if crossterm::event::poll(Duration::from_millis(100))? {
-                match self.event_handler.next()? {
+                let event = match self.event_handler.next() {
+                    Ok(e) => e,
+                    Err(e) => {
+                        log::error!("Failed to read event: {}", e);
+                        continue;
+                    }
+                };
+                
+                log::debug!("run: Received event: {:?}, current view_mode: {:?}", event, self.view_mode);
+                
+                match event {
                     AppEvent::Quit => {
+                        log::debug!("run: Quit event received");
                         self.running = false;
                     }
                     AppEvent::Refresh => {
+                        log::debug!("run: Refresh event received");
                         self.load_tickets().await;
                     }
                     AppEvent::MoveUp => {
@@ -133,9 +151,14 @@ impl App {
                         }
                     }
                     AppEvent::EnterDetail => {
+                        log::debug!("run: EnterDetail event received, view_mode: {:?}", self.view_mode);
                         match self.view_mode {
                             ViewMode::List => {
+                                log::debug!("run: Calling open_detail_view()");
+                                eprintln!("DEBUG: About to call open_detail_view()");
                                 self.open_detail_view().await;
+                                log::debug!("run: open_detail_view() completed");
+                                eprintln!("DEBUG: open_detail_view() completed");
                             }
                             ViewMode::Transitions => {
                                 // Execute selected transition
@@ -208,6 +231,11 @@ impl App {
                             // For now, just show a message
                         }
                     }
+                    AppEvent::OpenInBrowser => {
+                        if self.view_mode == ViewMode::Detail || self.view_mode == ViewMode::List {
+                            self.open_in_browser();
+                        }
+                    }
                     _ => {
                         // Other events handled elsewhere
                     }
@@ -246,26 +274,37 @@ impl App {
 
     /// Open detail view for focused ticket
     async fn open_detail_view(&mut self) {
+        log::debug!("open_detail_view: Starting");
+        
         if let Some(ticket) = self.ticket_list_state.focused_ticket() {
             let ticket_key = ticket.key.clone();
+            log::debug!("open_detail_view: Opening ticket {}", ticket_key);
+            
             self.view_mode = ViewMode::Detail;
             self.detail_loading = true;
             self.detail_ticket = None;
             self.detail_comments = Vec::new();
             self.current_ticket_key = Some(ticket_key.clone());
+            
+            log::debug!("open_detail_view: Set view mode to Detail, loading state set");
 
             // Fetch full ticket details and comments in parallel
+            log::debug!("open_detail_view: Starting parallel fetch for ticket and comments");
             let ticket_future = self.ticket_service.get_issue(&ticket_key);
             let comments_future = self.ticket_service.get_comments(&ticket_key);
 
             // Wait for both to complete
+            log::debug!("open_detail_view: Waiting for futures to complete");
             let (ticket_result, comments_result) = tokio::join!(ticket_future, comments_future);
+            log::debug!("open_detail_view: Futures completed");
 
             match ticket_result {
                 Ok(full_ticket) => {
+                    log::debug!("open_detail_view: Successfully fetched ticket {}", full_ticket.key);
                     self.detail_ticket = Some(full_ticket);
                 }
-                Err(_e) => {
+                Err(e) => {
+                    log::error!("open_detail_view: Failed to fetch ticket {}: {}", ticket_key, e);
                     // On error, use the ticket from list (may be incomplete)
                     self.detail_ticket = Some(ticket.clone());
                     // Could set an error state here if needed
@@ -274,15 +313,20 @@ impl App {
 
             match comments_result {
                 Ok(comments) => {
+                    log::debug!("open_detail_view: Successfully fetched {} comments", comments.len());
                     self.detail_comments = comments;
                 }
-                Err(_e) => {
-                    // On error, leave comments empty
+                Err(e) => {
+                    // On error, leave comments empty and log the error
+                    log::warn!("open_detail_view: Failed to load comments for {}: {}", ticket_key, e);
                     self.detail_comments = Vec::new();
                 }
             }
 
             self.detail_loading = false;
+            log::debug!("open_detail_view: Completed, loading state cleared");
+        } else {
+            log::warn!("open_detail_view: No focused ticket found");
         }
     }
 
@@ -378,6 +422,32 @@ impl App {
         }
     }
 
+    /// Open current ticket in browser
+    fn open_in_browser(&self) {
+        let ticket_key = match self.view_mode {
+            ViewMode::Detail => {
+                // Use the ticket key from detail view
+                self.current_ticket_key.as_deref()
+            }
+            ViewMode::List => {
+                // Use the focused ticket key from list
+                self.ticket_list_state.focused_ticket().map(|t| t.key.as_str())
+            }
+            _ => None,
+        };
+
+        if let Some(key) = ticket_key {
+            // Construct the Jira ticket URL
+            // Format: https://{instance}/browse/{ticket_key}
+            let url = format!("https://{}/browse/{}", self.instance_url, key);
+            
+            // Open the URL in the default browser
+            if let Err(e) = open::that(&url) {
+                eprintln!("Failed to open browser: {}", e);
+            }
+        }
+    }
+
     /// Draw the UI
     fn draw(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.terminal.draw(|frame| {
@@ -426,24 +496,33 @@ impl App {
                     }
                 }
                 ViewMode::Detail => {
+                    log::debug!("draw: Rendering Detail view");
                     // Render detail view
                     if self.detail_loading {
+                        log::debug!("draw: Detail view is loading");
                         if let Err(e) = self.renderer.render_content_area(
                             frame,
                             chunks[1],
                             "Loading ticket details...",
                         ) {
+                            log::error!("draw: Error rendering loading content: {}", e);
                             eprintln!("Error rendering content: {}", e);
                         }
                     } else if let Some(ticket) = &self.detail_ticket {
+                        log::debug!("draw: Rendering ticket detail for {}", ticket.key);
+                        log::debug!("draw: Comments count: {}", self.detail_comments.len());
                         let detail = TicketDetail::new(ticket, &self.detail_comments, self.renderer.theme());
+                        log::debug!("draw: Calling detail.render()");
                         detail.render(frame, chunks[1]);
+                        log::debug!("draw: detail.render() completed");
                     } else {
+                        log::warn!("draw: No ticket selected in detail view");
                         if let Err(e) = self.renderer.render_content_area(
                             frame,
                             chunks[1],
                             "No ticket selected.",
                         ) {
+                            log::error!("draw: Error rendering 'no ticket' content: {}", e);
                             eprintln!("Error rendering content: {}", e);
                         }
                     }
@@ -494,8 +573,6 @@ impl Drop for App {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_app_creation() {
         // Can't easily test without a real terminal, but we can test that

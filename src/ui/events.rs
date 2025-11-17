@@ -37,6 +37,8 @@ pub enum AppEvent {
     ShowTransitions,
     /// Add comment
     AddComment,
+    /// Open ticket in browser
+    OpenInBrowser,
     /// Unknown/unhandled key
     Unknown,
 }
@@ -100,6 +102,7 @@ impl EventHandler {
             KeyCode::Char('n') if key_event.modifiers.is_empty() => AppEvent::CreateTicket,
             KeyCode::Char('t') if key_event.modifiers.is_empty() => AppEvent::ShowTransitions,
             KeyCode::Char('c') if key_event.modifiers.is_empty() => AppEvent::AddComment,
+            KeyCode::Char('o') if key_event.modifiers.is_empty() => AppEvent::OpenInBrowser,
             _ => AppEvent::Unknown,
         }
     }
